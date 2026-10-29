@@ -1,0 +1,33 @@
+# ---- 构建产物 ----
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+
+# ---- 可执行文件 / 外部依赖（体积大，不入库）----
+# ffmpeg 请按 README 第 4 节自行放置
+*.exe
+*.dll
+
+# ---- 测试输出 ----
+tests/_out/
+tests/_out*/
+
+# ---- 本地设置与日志 ----
+*.log
+startup-error.log
+settings.json
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
