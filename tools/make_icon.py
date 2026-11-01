@@ -1,5 +1,7 @@
 """生成 VideoDownload 的程序图标（多尺寸 .ico，圆角 + 立体感）。
 
+同时输出浏览器扩展需要的 PNG 图标，保证扩展与桌面程序同源、风格一致。
+
 用法：
     .venv\\Scripts\\python.exe tools\\make_icon.py
 
@@ -21,6 +23,8 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "assets" / "videodownload.ico"
 PREVIEW = ROOT / "assets" / "videodownload-preview.png"
+EXT_ICON_DIR = ROOT / "extension" / "icons"
+EXT_ICON_SIZES = [16, 48, 128]      # manifest 里声明的那三档
 
 SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 
@@ -204,9 +208,15 @@ def build() -> None:
     frames[-1].save(OUT, format="ICO", sizes=[(n, n) for n in SIZES])
     master.resize((512, 512), Image.LANCZOS).save(PREVIEW, format="PNG")
 
+    # 浏览器扩展图标：直接复用同一份绘制结果，避免两套 logo
+    EXT_ICON_DIR.mkdir(parents=True, exist_ok=True)
+    for n in EXT_ICON_SIZES:
+        master.resize((n, n), Image.LANCZOS).save(EXT_ICON_DIR / f"icon{n}.png")
+
     print(f"已生成 {OUT}")
     print(f"尺寸：{', '.join(str(n) for n in SIZES)}")
     print(f"预览：{PREVIEW}")
+    print(f"扩展图标：{EXT_ICON_DIR}\\icon{{{','.join(map(str, EXT_ICON_SIZES))}}}.png")
 
 
 if __name__ == "__main__":

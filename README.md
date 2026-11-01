@@ -19,6 +19,7 @@
 | 合并 | DASH 流自动 `bestvideo+bestaudio`，按所选容器交给 ffmpeg 合并 |
 | 容错 | 容器不兼容时自动回退 MKV 重试；无效链接 / 私密视频 / 403 / 超时 等转成中文提示 |
 | 交互 | 无弹窗；记住上次链接与目录；中文目录可用；非法文件名自动清洗；打开并选中文件 |
+| 浏览器扩展 | 支持站点页面右下角悬浮按钮 / 工具栏图标一键发送链接，程序自动填入并解析 |
 
 ---
 
@@ -29,15 +30,21 @@ VideoDownload/
 ├── main.py                  # 启动入口（PyInstaller 入口）
 ├── app/
 │   ├── __init__.py
+│   ├── bridge.py            # 本地 HTTP 桥接服务（给浏览器扩展投递链接用）
 │   ├── config.py            # 路径解析、ffmpeg 查找（打包/源码两种模式）
 │   ├── core.py              # 核心逻辑：解析、格式选择、下载、错误友好化（无 GUI 依赖）
 │   ├── ui.py                # tkinter 界面
 │   └── util.py              # 大小/时长格式化、文件名清洗、设置读写
+├── extension/               # 浏览器扩展（Chrome / Edge，Manifest V3）
+│   ├── manifest.json
+│   ├── background/service_worker.js
+│   ├── content/pill.js      # 页面右下角悬浮按钮
+│   └── icons/               # 由 tools/make_icon.py 生成
 ├── assets/
 │   ├── videodownload.ico    # 程序图标（多尺寸，圆角立体）
 │   └── videodownload-preview.png
 ├── tools/
-│   └── make_icon.py         # 图标生成脚本（可重新生成 ico）
+│   └── make_icon.py         # 图标生成脚本（ico + 扩展图标）
 ├── tests/
 │   └── test_download.py     # 真实链路测试（无效链接 / 解析 / 视频 / 音频）
 ├── requirements.txt         # 运行依赖
@@ -163,7 +170,56 @@ PyInstaller 的静态分析抓不到。`VideoDownload.spec` 会扫描 `site-pack
 
 ---
 
-## 6. 使用说明
+## 6. 浏览器扩展
+
+`extension/` 是一个 Manifest V3 扩展，用于把浏览器当前页面的链接一键送到本程序。
+
+### 安装（加载未打包扩展）
+
+1. 打开 `chrome://extensions`（Edge 为 `edge://extensions`）。
+2. 打开右上角 **开发者模式**。
+3. 点 **加载已解压的扩展程序**，选择本项目的 `extension` 目录。
+4. 扩展图标出现在工具栏，之后保持程序运行即可自动连接。
+
+### 用法
+
+- **悬浮按钮**：在支持的站点页面上，右下角会出现蓝色胶囊「用 VideoDownload 下载」，
+  点一下即发送。按钮可拖拽，位置按站点分别记忆。
+- **工具栏图标**：任意页面点扩展图标，直接把当前页链接发过去。
+  图标角标显示 `✓`（成功）或 `!`（失败，悬停看原因）。
+
+支持的站点：YouTube（含 Shorts / Music）、Vimeo、Instagram、Facebook、
+X / Twitter、Bilibili、StashMedia、TikTok。
+
+### 工作方式
+
+程序启动时在 `127.0.0.1` 上按 `6811 → 6822 → 6833 → 6844 → 6855` 顺序绑定第一个可用端口，
+扩展后台每分钟探测一次并记住可用端口。状态栏会显示实际端口，例如：
+
+```
+✓ ffmpeg 已就绪：... | yt-dlp 2026.10.26 | 扩展桥接 127.0.0.1:6811
+```
+
+接口只有两个：
+
+| 接口 | 请求 | 响应 |
+| --- | --- | --- |
+| `POST /hello` | `{version, browser}` | `{ok, app:"videosdown", settings:{show_pill}}` |
+| `POST /submit` | `{url, title, version, browser}` | `{ok:true}` 或 `{ok:false, msg}` |
+
+只监听回环地址，请求体上限 64 KB，跨域只放行扩展来源与本机页面。
+收到链接后程序会自动置前、填入地址栏并立即解析；若当前正在解析/下载，
+只填入不解析，并在日志里说明。
+
+### 图标
+
+扩展图标与桌面程序同源：`tools/make_icon.py` 每次运行会同时写出
+`assets/videodownload.ico` 和 `extension/icons/icon{16,48,128}.png`，
+改图标只需改那一个脚本后重跑。
+
+---
+
+## 7. 使用说明
 
 1. 复制视频链接，点 **粘贴**（或 `Ctrl+V` 直接输入）。
 2. 点 **解析**（或回车）。成功后显示缩略图、标题、时长和清晰度下拉框。
@@ -192,7 +248,7 @@ PyInstaller 的静态分析抓不到。`VideoDownload.spec` 会扫描 `site-pack
 
 ---
 
-## 7. 格式与合并逻辑
+## 8. 格式与合并逻辑
 
 `app/core.py: build_format_selector()` 生成的 `-f` 串示例（1080p + mp4）：
 
@@ -219,7 +275,7 @@ bestvideo[height=1080][ext=mp4][vcodec!*=av01]+bestaudio[ext=m4a]
 
 ---
 
-## 8. 异常处理
+## 9. 异常处理
 
 | 场景 | 表现（仅状态行 / 日志） |
 | --- | --- |
@@ -239,7 +295,7 @@ bestvideo[height=1080][ext=mp4][vcodec!*=av01]+bestaudio[ext=m4a]
 
 ---
 
-## 9. 图标
+## 10. 图标
 
 `assets/videodownload.ico` 内含 16/20/24/32/40/48/64/96/128/256 十个尺寸，
 设计为圆角方形 + 蓝色渐变 + 中心柔光 + 内描边倒角 + 白色下载箭头（带投影），
@@ -257,7 +313,7 @@ bestvideo[height=1080][ext=mp4][vcodec!*=av01]+bestaudio[ext=m4a]
 
 ---
 
-## 10. 测试
+## 11. 测试
 
 ### 自动化脚本
 
@@ -297,10 +353,14 @@ rem 只测视频，不测音频
 | 10 | 把 ffmpeg.exe 移走重启 | 状态栏黄色告警；下载单文件格式仍可用 |
 | 11 | 在无 Python 的机器上运行 | 能正常启动（单文件自带运行时）|
 | 12 | 任意操作全程 | 除"浏览目录"的文件选择框外，不出现任何对话框 |
+| 13 | 加载扩展后打开 YouTube 视频页 | 右下角出现蓝色胶囊按钮，可拖拽 |
+| 14 | 点胶囊 / 点工具栏图标 | 程序置前、自动填链接并解析，按钮显示「已发送 ✓」 |
+| 15 | 在非支持站点（如 `example.org`） | 不出现悬浮按钮 |
+| 16 | 关闭程序后点扩展按钮 | 提示"软件未运行或连接已关闭"，不崩不阻塞 |
 
 ---
 
-## 11. 已知限制
+## 12. 已知限制
 
 - 需要登录 / 年龄验证 / 会员的内容无法直接下载（未接 cookies）。
 - YouTube 未安装 JS 运行时时，yt-dlp 会警告部分格式缺失；4K 通常仍可取到（VP9/AV1），

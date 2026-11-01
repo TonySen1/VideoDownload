@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "VideoDownload 助手",
+  "version": "1.1.0",
+  "description": "在支持的视频平台页面上，一键把链接发送到 VideoDownload 桌面程序解析下载。",
+  "minimum_chrome_version": "105",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/pill.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "把当前页面发送到 VideoDownload",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

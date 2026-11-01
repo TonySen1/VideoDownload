@@ -13,6 +13,7 @@ from tkinter import filedialog, ttk
 from typing import Any
 
 from . import APP_NAME, __version__, config
+from .bridge import BridgeServer
 from .core import (
     AUDIO_FORMATS,
     BEST_QUALITY,
@@ -67,9 +68,13 @@ class VideoDownloadApp:
         self.last_file: Path | None = None
         self._thumb_image: Any = None
         self._quality_options: list[Any] = []
+        self.bridge: BridgeServer | None = None
+        self._pending_bridge_url: str | None = None
+        self._bridge_lock = threading.Lock()
 
         self._build_ui()
         self._load_env_async()
+        self._start_bridge()
         self._poll()
 
     # ------------------------------------------------------------ 构建界面
@@ -260,19 +265,73 @@ class VideoDownloadApp:
         threading.Thread(target=work, daemon=True).start()
 
     def _apply_env(self, env: dict) -> None:
+        port = f"127.0.0.1:{self.bridge.port}" if self.bridge else "未开启"
+        suffix = f"　|　扩展桥接 {port}"
         if env.get("ffmpeg_ok"):
             self.env_label.configure(
-                text=f"✓ ffmpeg 已就绪：{env.get('ffmpeg')}　|　yt-dlp {env.get('yt_dlp_version')}",
+                text=f"✓ ffmpeg 已就绪：{env.get('ffmpeg')}　|　yt-dlp {env.get('yt_dlp_version')}{suffix}",
                 foreground=OK_COLOR,
             )
             self._log(f"ffmpeg: {env.get('ffmpeg')}")
         else:
             self.env_label.configure(
                 text="⚠ 未找到 ffmpeg：仅能下载单文件格式，无法合并音视频或转码。"
-                     "请把 ffmpeg.exe 放到程序同目录后重启。",
+                     f"请把 ffmpeg.exe 放到程序同目录后重启。{suffix}",
                 foreground=WARN_COLOR,
             )
             self._log("未检测到 ffmpeg，音视频合并与音频转换将不可用。")
+
+    # ------------------------------------------------------------ 浏览器扩展桥接
+    def _start_bridge(self) -> None:
+        """启动本机桥接服务，供浏览器扩展把链接投递进来。"""
+        bridge = BridgeServer(
+            on_submit=self._on_bridge_submit,
+            settings=lambda: {"show_pill": True},
+            app_version=__version__,
+        )
+        if bridge.start():
+            self.bridge = bridge
+            self._log(f"浏览器扩展桥接已开启：http://127.0.0.1:{bridge.port}")
+        else:
+            self.bridge = None
+            reason = bridge.last_error or "端口被占用"
+            self._log(f"⚠ 浏览器扩展桥接未能启动（{reason}），扩展功能不可用。")
+            self._set_status(
+                "⚠ 浏览器扩展桥接端口被占用，扩展暂时无法连接", WARN_COLOR
+            )
+
+    def _on_bridge_submit(self, url: str, title: str, raw: dict[str, Any]) -> tuple[bool, str]:
+        """工作线程回调：只做校验与入队，UI 操作交给主线程。"""
+        url = (url or "").strip()
+        if not url.lower().startswith(("http://", "https://")):
+            return False, "只支持 http/https 链接"
+        # 同一时刻只保留一个待处理链接，避免连点挤爆队列。
+        # 多个 HTTP 线程可能并发进来，必须加锁。
+        with self._bridge_lock:
+            if self._pending_bridge_url:
+                return True, ""
+            self._pending_bridge_url = url
+        self.events.put(("bridge", {"url": url, "title": title}))
+        return True, ""
+
+    def _on_bridge_request(self, payload: dict) -> None:
+        url = payload.get("url") or ""
+        title = payload.get("title") or ""
+        with self._bridge_lock:
+            self._pending_bridge_url = None
+        self.root.deiconify()
+        self.root.lift()
+        try:
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+        self.url_var.set(url)
+        self._log(f"来自浏览器扩展：{title or url}")
+        if self.busy:
+            self._log("当前任务进行中，链接已填入，完成后可手动点击「解析」。")
+            self._set_status("已接收浏览器链接，请等待当前任务结束。", WARN_COLOR)
+            return
+        self.on_parse()
 
     # ------------------------------------------------------------ 事件循环
     def _poll(self) -> None:
@@ -299,6 +358,8 @@ class VideoDownloadApp:
             self._on_download_done(payload)
         elif kind == "thumb":
             self._set_thumbnail(payload)
+        elif kind == "bridge":
+            self._on_bridge_request(payload)
 
     # ------------------------------------------------------------ 日志/状态
     def _log(self, message: str) -> None:
@@ -649,6 +710,8 @@ class VideoDownloadApp:
         self.settings["save_dir"] = self.dir_var.get().strip()
         self.settings["out_format"] = self.format_combo.get()
         save_settings(self.settings)
+        if self.bridge:
+            self.bridge.stop()
         self.root.destroy()
 
 

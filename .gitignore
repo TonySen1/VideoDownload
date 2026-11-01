@@ -20,6 +20,10 @@ env/
 tests/_out/
 tests/_out*/
 
+# ---- 本地下载目录（可能含个人内容）----
+Downloads/
+dist_backup/
+
 # ---- 本地设置与日志 ----
 *.log
 startup-error.log
