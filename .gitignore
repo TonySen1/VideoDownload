@@ -24,6 +24,13 @@ tests/_out*/
 Downloads/
 dist_backup/
 
+# ---- 凭据：绝对不能入库 ----
+# cookies.txt 等同账号登录凭据，泄露可被直接接管账号
+cookies.txt
+*cookies*.txt
+!app/cookies.py
+!extension/background/cookies.js
+
 # ---- 本地设置与日志 ----
 *.log
 startup-error.log

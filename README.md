@@ -7,6 +7,17 @@
 
 > 全程**不使用任何弹窗**：所有校验、告警、错误、完成提示都只出现在状态行和日志区。
 
+> [!IMPORTANT]
+> **使用须知**
+>
+> 本项目仅供个人学习、研究与**自有内容的备份**使用。
+>
+> - 请遵守目标网站的服务条款与当地法律。未获得授权时，下载受版权保护的内容可能侵权。
+> - `yt-dlp` 等第三方组件的行为由其各自项目负责，本项目仅提供图形界面。
+> - 请勿将本工具用于商业用途、批量抓取或再分发他人作品。
+>
+> 使用本软件即表示你已知悉并自行承担相应责任。
+
 ---
 
 ## 1. 功能
@@ -20,8 +31,8 @@
 | 容错 | 容器不兼容时自动回退 MKV 重试；无效链接 / 私密视频 / 403 / 超时 等转成中文提示 |
 | 交互 | 无弹窗；记住上次链接与目录；中文目录可用；非法文件名自动清洗；打开并选中文件 |
 | 浏览器扩展 | 支持站点页面右下角悬浮按钮 / 工具栏弹窗一键发送链接，程序自动填入并解析 |
-| 登录 cookies | 扩展一键同步登录态，解决 YouTube 年龄限制、需登录等无法直接下载的视频 |
-| JS 运行时 | 自动探测 Node/deno 并启用 EJS 挑战求解，年龄限制视频才能取到完整清晰度 |
+| 登录 cookies | 扩展一键同步登录态，用于访问本人账号下已获授权观看的内容 |
+| JS 运行时 | 自动探测 Node/deno 并启用 EJS 组件，保证完整清晰度可用 |
 
 ---
 
@@ -196,10 +207,13 @@ PyInstaller 的静态分析抓不到。`VideoDownload.spec` 会扫描 `site-pack
 支持的站点：YouTube（含 Shorts / Music）、Vimeo、Instagram、Facebook、
 X / Twitter、Bilibili、StashMedia、TikTok。
 
-### 同步 cookies（年龄限制 / 需登录的视频）
+### 同步 cookies（登录后才能访问的视频）
 
-YouTube 等站点对部分视频要求登录或年龄验证，不带 cookie 会报
-`Sign in to confirm your age`。
+部分视频需要登录账号才能观看（例如账号可见、好友分享、已订阅会员内容）。
+这类视频不带 cookie 时解析会报 `Sign in to confirm your age` 或 `login required`。
+
+> 请仅同步**你自己账号**的登录状态，并确保对这些内容有观看权限。
+> cookies 等同于账号凭据，请勿分享 `cookies.txt` 文件。
 
 **为什么不能直接用 yt-dlp 读浏览器**：
 
@@ -220,19 +234,19 @@ YouTube 等站点对部分视频要求登录或年龄验证，不带 cookie 会�
 > 前提：`%LOCALAPPDATA%` 数据目录里没有 cookies.txt 时，程序也会自动探测
 > exe 同目录的 `cookies.txt`；环境变量 `YTDIP_COOKIES` 优先级最高。
 
-### 年龄限制视频为什么还需要 JS 运行时
+### 为什么还需要 JS 运行时
 
-只给 cookies 还不够。yt-dlp 2025.11 起把 YouTube 的 JS 挑战求解脚本拆成了
-可下载组件，默认不启用，表现是**解析成功但只返回 storyboard 缩略图格式**
+只配 cookies 还不够。yt-dlp 2025.11 起把 YouTube 页面脚本求值的组件拆成了
+可下载模块，默认不启用，表现是**解析成功但只返回 storyboard 缩略图格式**
 （日志里 `format is not available` 或格式列表只有 `sb0..sb3`）。
 
 程序启动时会自动配置两项：
 - `js_runtimes`：探测 `deno` / `node` / `bun` / `quickjs`，命中即用；
   也可以用环境变量 `YTDIP_JS_RUNTIME` 指定。
-- `remote_components: ["ejs:github"]`：首次使用会联网拉取挑战求解脚本（几秒）。
+- `remote_components: ["ejs:github"]`：首次使用会联网拉取该组件（几秒）。
 
 > Windows 机器上通常装有 Node.js，能直接满足要求。如果既没有 Node 也没装
-> deno，YouTube 的年龄限制视频会拿不到可用格式（普通视频不受影响）。
+> deno，部分视频会拿不到可用格式（大多数普通视频不受影响）。
 
 ### 工作方式
 
@@ -406,15 +420,25 @@ rem 只测视频，不测音频
 | 15 | 在非支持站点（如 `example.org`） | 不出现悬浮按钮 |
 | 16 | 关闭程序后点扩展按钮 | 提示"软件未运行或连接已关闭"，不崩不阻塞 |
 | 17 | 弹窗点「同步 cookies 到程序」 | 日志显示「✓ 已同步 cookies：N 条」，`cookies.txt` 落盘 |
-| 18 | 同步 cookies 后解析年龄限制视频 | 出现完整清晰度列表（含 4K），不再只报 Sign in to confirm your age |
-| 19 | 机器上没有 Node/deno | 年龄限制视频仍拿不到格式（普通视频正常），日志提示缺 JS 运行时 |
+| 18 | 同步 cookies 后解析需登录的视频 | 出现完整清晰度列表，不再报 Sign in to confirm your age |
+| 19 | 机器上没有 Node/deno | 部分视频仍拿不到格式（多数普通视频正常），日志提示缺 JS 运行时 |
 
 ---
 
 ## 12. 已知限制
 
-- 需要登录 / 年龄验证 / 会员的内容无法直接下载（未接 cookies）。
-- YouTube 未安装 JS 运行时时，yt-dlp 会警告部分格式缺失；4K 通常仍可取到（VP9/AV1），
-  只是某些高阶格式（如部分 H.264 高清）可能拿不到。
+- 需要登录的内容要在扩展里同步一次 cookies；没有登录态时这类视频无法解析。
+- 机器上没有 Node/deno 时，部分视频会缺格式（多数普通视频不受影响）。
+- `remote_components` 首次使用需联网下载组件，离线环境下会失败。
 - 只处理播放列表的第一条。
 - 未做多任务并行下载队列（一次一个任务，便于控制进度与取消）。
+- cookies 明文保存在本机，等同于账号凭据；请勿分享 `cookies.txt`。
+
+---
+
+## 13. 许可证
+
+本项目以 [MIT License](LICENSE) 发布。
+
+第三方依赖各自遵循其许可证：`yt-dlp`（Unlicense）、`Pillow`（HPND）、
+`ffmpeg`（未随仓库分发，按需自行获取并遵守其 LGPL/GPL 条款）。
