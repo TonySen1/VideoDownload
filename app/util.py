@@ -87,6 +87,7 @@ _DEFAULT_SETTINGS = {
     "save_dir": "",
     "out_format": "自动",
     "last_url": "",
+    "cookiefile": "",
 }
 
 

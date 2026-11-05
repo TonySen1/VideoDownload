@@ -11,6 +11,8 @@
  *   POST /submit {url, title, version, browser} -> {ok, msg?}
  */
 
+import { exportCookies } from "./cookies.js";
+
 const PORTS = [6811, 6822, 6833, 6844, 6855];
 const APP_ID = "videosdown";
 const HELLO_TIMEOUT_MS = 2500;
@@ -164,21 +166,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "export-cookies") {
+    exportCookies().then(sendResponse);
+    return true;
+  }
+
   return false;
 });
 
-// ------------------------------------------------------------------ 工具栏图标
+// 注：工具栏图标现在打开 popup（见 manifest 的 action.default_popup），
+// 一键发送与 cookies 同步都在弹窗里完成，因此这里不再注册 onClicked。
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.url) return;
-  const result = await sendToApp(tab.url, tab.title);
-  chrome.action.setBadgeText({ tabId: tab.id, text: result.ok ? "✓" : "!" });
-  chrome.action.setBadgeBackgroundColor({
-    tabId: tab.id,
-    color: result.ok ? "#2563eb" : "#b91c1c",
-  });
-  chrome.action.setTitle({
-    tabId: tab.id,
-    title: result.ok ? "已发送，请在 VideoDownload 中查看解析结果" : result.msg,
-  });
-});
+// 供自动化测试直接调用（Service Worker 无法给自己 sendMessage）
+globalThis.__vdExportCookies = exportCookies;
+globalThis.__vdSendToApp = sendToApp;

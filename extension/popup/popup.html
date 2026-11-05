@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>VideoDownload 助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <img class="logo" src="../icons/icon48.png" alt="">
+    <div class="titles">
+      <h1>VideoDownload 助手</h1>
+      <p class="version" id="version">v—</p>
+    </div>
+    <span class="status" id="status-dot" title="连接状态"></span>
+  </header>
+
+  <section class="card">
+    <p class="label">当前页面</p>
+    <p class="page-title" id="page-title">—</p>
+    <button class="btn primary" id="send-btn">发送到 VideoDownload</button>
+  </section>
+
+  <section class="card">
+    <p class="label">登录 cookies</p>
+    <p class="hint">
+      遇到年龄限制或需要登录的视频时，点下面的按钮把当前浏览器的登录状态同步给程序。
+      只同步视频站点的 cookie，内容不会留存。
+    </p>
+    <button class="btn" id="cookies-btn">同步 cookies 到程序</button>
+  </section>
+
+  <p class="result" id="result"></p>
+
+  <footer class="foot">
+    <span>桥接端口 <b id="port">未连接</b></span>
+  </footer>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

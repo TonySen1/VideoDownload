@@ -12,7 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
-from . import APP_NAME, __version__, config
+from . import APP_NAME, __version__, config, cookies as cookie_util
 from .bridge import BridgeServer
 from .core import (
     AUDIO_FORMATS,
@@ -178,6 +178,25 @@ class VideoDownloadApp:
             row=1, column=3, sticky="ew", pady=(10, 0)
         )
 
+        # ---------------- cookies（年龄限制 / 需登录的视频）
+        ttk.Label(opt, text="cookies 文件：").grid(row=2, column=0, sticky="w", pady=(10, 0))
+        self.cookies_var = tk.StringVar(value=self.settings.get("cookiefile", ""))
+        self.cookies_entry = ttk.Entry(opt, textvariable=self.cookies_var, font=FONT)
+        self.cookies_entry.grid(
+            row=2, column=1, columnspan=2, sticky="ew", padx=(0, 8), pady=(10, 0), ipady=2
+        )
+        self.cookies_btn = ttk.Button(
+            opt, text="选择…", width=8, command=self.on_pick_cookies
+        )
+        self.cookies_btn.grid(row=2, column=3, sticky="ew", pady=(10, 0))
+        ttk.Label(
+            opt,
+            text="可选。遇到年龄限制 / 需登录的视频时，选择浏览器导出的 cookies.txt。",
+            style="Card.TLabel",
+            foreground=MUTED,
+            font=("Microsoft YaHei UI", 8),
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(4, 0))
+
         # ---------------- 下载按钮
         action = ttk.Frame(outer)
         action.grid(row=3, column=0, sticky="ew", pady=(10, 0))
@@ -267,6 +286,12 @@ class VideoDownloadApp:
     def _apply_env(self, env: dict) -> None:
         port = f"127.0.0.1:{self.bridge.port}" if self.bridge else "未开启"
         suffix = f"　|　扩展桥接 {port}"
+        if env.get("cookies_ok"):
+            suffix += "　|　cookies 已加载"
+        # 设置里保存的文件优先展示
+        configured = self.settings.get("cookiefile", "")
+        if configured and Path(configured).is_file():
+            self.cookies_var.set(configured)
         if env.get("ffmpeg_ok"):
             self.env_label.configure(
                 text=f"✓ ffmpeg 已就绪：{env.get('ffmpeg')}　|　yt-dlp {env.get('yt_dlp_version')}{suffix}",
@@ -288,6 +313,7 @@ class VideoDownloadApp:
             on_submit=self._on_bridge_submit,
             settings=lambda: {"show_pill": True},
             app_version=__version__,
+            on_cookies=self._on_bridge_cookies,
         )
         if bridge.start():
             self.bridge = bridge
@@ -313,6 +339,38 @@ class VideoDownloadApp:
             self._pending_bridge_url = url
         self.events.put(("bridge", {"url": url, "title": title}))
         return True, ""
+
+    def _on_bridge_cookies(self, cookies: list, raw: dict) -> tuple[bool, str]:
+        """扩展送来的 cookies：白名单过滤后写入数据目录，并立即生效。"""
+        target = config.default_cookiefile()
+        try:
+            written, skipped = cookie_util.save(target, cookies)
+        except ValueError as exc:
+            return False, str(exc)
+        except OSError as exc:
+            return False, f"写入 cookies 失败：{exc}"
+
+        self.events.put(("cookies", {"path": str(target), "written": written, "skipped": skipped}))
+        msg = f"已接收 {written} 条 cookies"
+        if skipped:
+            msg += f"（忽略 {skipped} 条非白名单/异常项）"
+        return True, msg
+
+    def _on_cookies_saved(self, payload: dict) -> None:
+        path = payload.get("path") or ""
+        written = payload.get("written", 0)
+        skipped = payload.get("skipped", 0)
+
+        self.settings["cookiefile"] = path
+        save_settings(self.settings)
+        self.cookies_var.set(path)
+
+        self._log(f"✓ 浏览器扩展已同步 cookies：{written} 条 → {path}")
+        if skipped:
+            self._log(f"    其中 {skipped} 条因域名不在白名单或内容异常被忽略。")
+        self._set_status(
+            f"✓ 已接收 {written} 条 cookies，现在可以下载需要登录的视频了。", OK_COLOR
+        )
 
     def _on_bridge_request(self, payload: dict) -> None:
         url = payload.get("url") or ""
@@ -360,6 +418,8 @@ class VideoDownloadApp:
             self._set_thumbnail(payload)
         elif kind == "bridge":
             self._on_bridge_request(payload)
+        elif kind == "cookies":
+            self._on_cookies_saved(payload)
 
     # ------------------------------------------------------------ 日志/状态
     def _log(self, message: str) -> None:
@@ -406,6 +466,29 @@ class VideoDownloadApp:
         if chosen:
             self.dir_var.set(chosen)
 
+    def on_pick_cookies(self) -> None:
+        current = self.cookies_var.get().strip()
+        initial_dir = str(Path(current).parent) if current and Path(current).is_file() else str(Path.home())
+        chosen = filedialog.askopenfilename(
+            title="选择 cookies.txt",
+            initialdir=initial_dir,
+            filetypes=[("Cookies 文件", "*.txt"), ("所有文件", "*.*")],
+        )
+        if chosen:
+            self.cookies_var.set(chosen)
+            self.settings["cookiefile"] = chosen
+            save_settings(self.settings)
+            self._log(f"已选择 cookies 文件：{chosen}")
+
+    def _cookiefile(self) -> str | None:
+        """返回当前可用的 cookies 路径；没填或文件不存在则返回 None。"""
+        raw = self.cookies_var.get().strip()
+        if raw and Path(raw).is_file():
+            return raw
+        if raw and not Path(raw).is_file():
+            self._log(f"⚠ cookies 文件不存在，已忽略：{raw}")
+        return config.find_cookiefile()
+
     def _sync_quality_state(self) -> None:
         """选了音频格式时，清晰度无意义，禁用下拉。"""
         fmt = self.format_combo.get()
@@ -430,6 +513,8 @@ class VideoDownloadApp:
             self.url_entry.configure(state="disabled")
             self.format_combo.configure(state="disabled")
             self.dir_entry.configure(state="disabled")
+            self.cookies_entry.configure(state="disabled")
+            self.cookies_btn.configure(state="disabled")
             self.download_btn.configure(state="disabled")
             if mode == "download":
                 self.cancel_btn.configure(state="normal")
@@ -442,6 +527,8 @@ class VideoDownloadApp:
             self.url_entry.configure(state="normal")
             self.format_combo.configure(state="readonly")
             self.dir_entry.configure(state="normal")
+            self.cookies_entry.configure(state="normal")
+            self.cookies_btn.configure(state="normal")
             self.cancel_btn.configure(state="disabled")
             self._sync_quality_state()
             if self.info:
@@ -467,7 +554,10 @@ class VideoDownloadApp:
         self._set_status("正在解析链接…", ACCENT)
         self._log(f"解析：{raw.strip()}")
 
-        analyzer = Analyzer()
+        cookies = self._cookiefile()
+        if cookies:
+            self._log(f"使用 cookies：{cookies}")
+        analyzer = Analyzer(cookiefile=cookies)
         self.analyzer = analyzer
 
         def work() -> None:
@@ -595,6 +685,7 @@ class VideoDownloadApp:
             expected_title=self.info.effective_title,
             on_progress=lambda e: self.events.put(("progress", e)),
             on_log=lambda m: self.events.put(("log", m)),
+            cookiefile=self._cookiefile(),
         )
         self.task = task
         self.last_file = None
@@ -709,6 +800,7 @@ class VideoDownloadApp:
         self.settings["last_url"] = self.url_var.get().strip()
         self.settings["save_dir"] = self.dir_var.get().strip()
         self.settings["out_format"] = self.format_combo.get()
+        self.settings["cookiefile"] = self.cookies_var.get().strip()
         save_settings(self.settings)
         if self.bridge:
             self.bridge.stop()

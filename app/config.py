@@ -52,6 +52,25 @@ def settings_path() -> Path:
     return data_dir() / "settings.json"
 
 
+def default_cookiefile() -> Path:
+    """用户放置 cookies.txt 的默认位置，程序启动时自动探测。"""
+    return data_dir() / "cookies.txt"
+
+
+def find_cookiefile() -> Path | None:
+    """按优先级找可用的 cookies 文件：环境变量 > 数据目录 > exe 同目录。"""
+    env = os.environ.get("YTDIP_COOKIES")
+    if env:
+        p = Path(env)
+        if p.is_file():
+            return p.resolve()
+
+    for candidate in (default_cookiefile(), app_dir() / "cookies.txt"):
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate.resolve()
+    return None
+
+
 def default_download_dir() -> Path:
     """默认保存目录：当前用户的「下载」文件夹，不存在则退回用户主目录。"""
     home = Path.home()
@@ -109,3 +128,28 @@ def ffmpeg_location() -> str | None:
     """传给 yt-dlp 的 ffmpeg_location 参数。"""
     p = find_ffmpeg()
     return str(p) if p else None
+
+
+# yt-dlp 支持的 JS 运行时名（用于 YouTube 的 JS 挑战求解）
+_JS_RUNTIMES = ("deno", "node", "bun", "quickjs")
+
+
+def find_js_runtime() -> str | None:
+    """找一个可用的 JS 运行时。
+
+    yt-dlp 默认只启用 deno，但 Windows 用户机器上更常见的是 Node.js。
+    没有运行时时 YouTube 部分格式（含年龄限制视频的全部格式）会缺失。
+    """
+    env = os.environ.get("YTDIP_JS_RUNTIME")
+    if env and shutil.which(env):
+        return env
+
+    # exe 同目录优先，方便放一个便携版 node.exe
+    for name in _JS_RUNTIMES:
+        exe = name + (".exe" if os.name == "nt" else "")
+        local = app_dir() / exe
+        if local.is_file():
+            return name
+        if shutil.which(name):
+            return name
+    return None

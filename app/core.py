@@ -107,7 +107,14 @@ _FRIENDLY_ERRORS: list[tuple[tuple[str, ...], str]] = [
     (("video unavailable", "has been removed"), "视频不存在或已被删除。"),
     (("private video", "this video is private"), "该视频是私密的，无法下载。"),
     (("members-only", "join to confirm"), "该视频仅会员可见，无法下载。"),
-    (("sign in", "confirm your age", "login required"), "该视频需要登录或年龄验证，无法直接下载。"),
+    (
+        ("confirm your age", "sign in to confirm your age", "age-restricted"),
+        "该视频有年龄限制，需要登录后才能下载。请在「cookies 文件」中选择已登录账号导出的 cookies.txt。",
+    ),
+    (
+        ("sign in", "login required", "requires authentication"),
+        "该视频需要登录，请在「cookies 文件」中选择已登录账号导出的 cookies.txt。",
+    ),
     (("http error 403", "forbidden"), "服务器拒绝访问（403），可能需要登录或链接已失效。"),
     (("http error 404", "not found"), "资源不存在（404），请检查链接。"),
     (("http error 429", "too many requests"), "请求过于频繁（429），请稍后再试。"),
@@ -292,12 +299,44 @@ def build_format_selector(height: int | None, container: str) -> str:
 
 # ------------------------------------------------------------------ 解析
 
+def _cookie_opts(cookiefile: str | Path | None) -> dict[str, Any]:
+    """把 cookies.txt 路径转成 yt-dlp 选项；文件不存在时就当没配置。"""
+    if not cookiefile:
+        return {}
+    path = Path(cookiefile)
+    if not path.is_file():
+        return {}
+    return {"cookiefile": str(path)}
+
+
+def _js_runtime_opts() -> dict[str, Any]:
+    """YouTube 的 JS 挑战需要外部运行时，否则会缺格式。
+
+    yt-dlp 默认只启用 deno；用户机器上更常见的是 Node.js。
+    检测到哪个就配哪个，都没有时交给 yt-dlp 自己报错。
+    """
+    runtime = config.find_js_runtime()
+    if not runtime:
+        return {}
+    return {"js_runtimes": {runtime: {}}}
+
+
+def _ejs_opts() -> dict[str, Any]:
+    """启用远程 EJS 挑战求解脚本。
+
+    yt-dlp 2025.11+ 把 JS challenge solver 拆成了可下载组件，
+    不启用时 YouTube 只给 storyboard 缩略图（表现为「无可用格式」）。
+    """
+    return {"remote_components": ["ejs:github"]}
+
+
 class Analyzer:
     """封装 yt-dlp 的「只解析不下载」流程。"""
 
-    def __init__(self) -> None:
+    def __init__(self, cookiefile: str | Path | None = None) -> None:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
+        self.cookiefile = cookiefile or config.find_cookiefile()
 
     def cancel(self) -> None:
         self._cancel.set()
@@ -318,6 +357,9 @@ class Analyzer:
         ffmpeg = config.ffmpeg_location()
         if ffmpeg:
             opts["ffmpeg_location"] = ffmpeg
+        opts.update(_cookie_opts(self.cookiefile))
+        opts.update(_js_runtime_opts())
+        opts.update(_ejs_opts())
         return opts
 
     def parse(self, raw_url: str) -> VideoInfo:
@@ -369,6 +411,7 @@ class DownloadTask:
         expected_title: str = "",
         on_progress: Callable[[ProgressEvent], None] | None = None,
         on_log: Callable[[str], None] | None = None,
+        cookiefile: str | Path | None = None,
     ) -> None:
         self.url = normalize_url(url)
         self.save_dir = Path(save_dir)
@@ -377,6 +420,7 @@ class DownloadTask:
         self.expected_title = expected_title
         self.on_progress = on_progress or (lambda e: None)
         self.on_log = on_log or (lambda m: None)
+        self.cookiefile = cookiefile or config.find_cookiefile()
 
         self._cancel = threading.Event()
         self._segment_done = 0
@@ -524,6 +568,9 @@ class DownloadTask:
         ffmpeg = config.ffmpeg_location()
         if ffmpeg:
             opts["ffmpeg_location"] = ffmpeg
+        opts.update(_cookie_opts(self.cookiefile))
+        opts.update(_js_runtime_opts())
+        opts.update(_ejs_opts())
 
         if self.is_audio:
             opts["format"] = "bestaudio/best"
@@ -671,11 +718,14 @@ class _NullLogger:
 
 
 def check_environment() -> dict[str, Any]:
-    """启动时自检：ffmpeg 是否就位。返回给 UI 展示。"""
+    """启动时自检：ffmpeg、cookies 是否就位。返回给 UI 展示。"""
     ffmpeg = config.find_ffmpeg()
+    cookies = config.find_cookiefile()
     return {
         "ffmpeg": str(ffmpeg) if ffmpeg else None,
         "ffmpeg_ok": ffmpeg is not None,
+        "cookies": str(cookies) if cookies else None,
+        "cookies_ok": cookies is not None,
         "yt_dlp_version": getattr(yt_dlp.version, "__version__", "unknown"),
         "save_dir": str(config.default_download_dir()),
     }

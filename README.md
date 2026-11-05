@@ -19,7 +19,9 @@
 | 合并 | DASH 流自动 `bestvideo+bestaudio`，按所选容器交给 ffmpeg 合并 |
 | 容错 | 容器不兼容时自动回退 MKV 重试；无效链接 / 私密视频 / 403 / 超时 等转成中文提示 |
 | 交互 | 无弹窗；记住上次链接与目录；中文目录可用；非法文件名自动清洗；打开并选中文件 |
-| 浏览器扩展 | 支持站点页面右下角悬浮按钮 / 工具栏图标一键发送链接，程序自动填入并解析 |
+| 浏览器扩展 | 支持站点页面右下角悬浮按钮 / 工具栏弹窗一键发送链接，程序自动填入并解析 |
+| 登录 cookies | 扩展一键同步登录态，解决 YouTube 年龄限制、需登录等无法直接下载的视频 |
+| JS 运行时 | 自动探测 Node/deno 并启用 EJS 挑战求解，年龄限制视频才能取到完整清晰度 |
 
 ---
 
@@ -31,14 +33,18 @@ VideoDownload/
 ├── app/
 │   ├── __init__.py
 │   ├── bridge.py            # 本地 HTTP 桥接服务（给浏览器扩展投递链接用）
+│   ├── cookies.py           # cookies.txt 生成与域名白名单校验
 │   ├── config.py            # 路径解析、ffmpeg 查找（打包/源码两种模式）
 │   ├── core.py              # 核心逻辑：解析、格式选择、下载、错误友好化（无 GUI 依赖）
 │   ├── ui.py                # tkinter 界面
 │   └── util.py              # 大小/时长格式化、文件名清洗、设置读写
 ├── extension/               # 浏览器扩展（Chrome / Edge，Manifest V3）
 │   ├── manifest.json
-│   ├── background/service_worker.js
+│   ├── background/
+│   │   ├── service_worker.js
+│   │   └── cookies.js       # 收集并转发登录 cookies
 │   ├── content/pill.js      # 页面右下角悬浮按钮
+│   ├── popup/               # 工具栏弹窗（发送链接 / 同步 cookies）
 │   └── icons/               # 由 tools/make_icon.py 生成
 ├── assets/
 │   ├── videodownload.ico    # 程序图标（多尺寸，圆角立体）
@@ -185,11 +191,48 @@ PyInstaller 的静态分析抓不到。`VideoDownload.spec` 会扫描 `site-pack
 
 - **悬浮按钮**：在支持的站点页面上，右下角会出现蓝色胶囊「用 VideoDownload 下载」，
   点一下即发送。按钮可拖拽，位置按站点分别记忆。
-- **工具栏图标**：任意页面点扩展图标，直接把当前页链接发过去。
-  图标角标显示 `✓`（成功）或 `!`（失败，悬停看原因）。
+- **工具栏弹窗**：点扩展图标打开，可「发送到 VideoDownload」或「同步 cookies 到程序」。
 
 支持的站点：YouTube（含 Shorts / Music）、Vimeo、Instagram、Facebook、
 X / Twitter、Bilibili、StashMedia、TikTok。
+
+### 同步 cookies（年龄限制 / 需登录的视频）
+
+YouTube 等站点对部分视频要求登录或年龄验证，不带 cookie 会报
+`Sign in to confirm your age`。
+
+**为什么不能直接用 yt-dlp 读浏览器**：
+
+- Chrome 127+ 用 App-Bound Encryption 加密 cookie（数据库里是 `v20` 前缀），
+  yt-dlp 读取会报 `Failed to decrypt with DPAPI`；
+- Edge 会因数据库被浏览器占用而复制失败。
+
+**解决办法**：让扩展用 `chrome.cookies` API 取明文，转发给本程序。
+
+1. 浏览器里正常登录 YouTube；
+2. 点扩展图标 → **同步 cookies 到程序**；
+3. 程序日志显示「✓ 浏览器扩展已同步 cookies：N 条」；
+4. 之后这类视频可直接解析下载。
+
+同步结果保存在 `%LOCALAPPDATA%\VideoDownload\cookies.txt`。
+也可以在界面「下载选项 → cookies 文件」里手动指定自己导出的 `cookies.txt`。
+
+> 前提：`%LOCALAPPDATA%` 数据目录里没有 cookies.txt 时，程序也会自动探测
+> exe 同目录的 `cookies.txt`；环境变量 `YTDIP_COOKIES` 优先级最高。
+
+### 年龄限制视频为什么还需要 JS 运行时
+
+只给 cookies 还不够。yt-dlp 2025.11 起把 YouTube 的 JS 挑战求解脚本拆成了
+可下载组件，默认不启用，表现是**解析成功但只返回 storyboard 缩略图格式**
+（日志里 `format is not available` 或格式列表只有 `sb0..sb3`）。
+
+程序启动时会自动配置两项：
+- `js_runtimes`：探测 `deno` / `node` / `bun` / `quickjs`，命中即用；
+  也可以用环境变量 `YTDIP_JS_RUNTIME` 指定。
+- `remote_components: ["ejs:github"]`：首次使用会联网拉取挑战求解脚本（几秒）。
+
+> Windows 机器上通常装有 Node.js，能直接满足要求。如果既没有 Node 也没装
+> deno，YouTube 的年龄限制视频会拿不到可用格式（普通视频不受影响）。
 
 ### 工作方式
 
@@ -200,12 +243,17 @@ X / Twitter、Bilibili、StashMedia、TikTok。
 ✓ ffmpeg 已就绪：... | yt-dlp 2026.10.26 | 扩展桥接 127.0.0.1:6811
 ```
 
-接口只有两个：
+接口有三个：
 
 | 接口 | 请求 | 响应 |
 | --- | --- | --- |
 | `POST /hello` | `{version, browser}` | `{ok, app:"videosdown", settings:{show_pill}}` |
 | `POST /submit` | `{url, title, version, browser}` | `{ok:true}` 或 `{ok:false, msg}` |
+| `POST /cookies` | `{cookies:[...], source}` | `{ok:true, msg:"已接收 N 条"}` 或 `{ok:false, msg}` |
+
+`/cookies` 的域名白名单在 `app/cookies.py` 与 `extension/background/cookies.js`
+两处各校验一次，只接受视频站点及其登录依赖域（如 YouTube 需要 `google.com`），
+其它域一律丢弃；返回值只含条数，不回传 cookie 内容。
 
 只监听回环地址，请求体上限 64 KB，跨域只放行扩展来源与本机页面。
 收到链接后程序会自动置前、填入地址栏并立即解析；若当前正在解析/下载，
@@ -354,9 +402,12 @@ rem 只测视频，不测音频
 | 11 | 在无 Python 的机器上运行 | 能正常启动（单文件自带运行时）|
 | 12 | 任意操作全程 | 除"浏览目录"的文件选择框外，不出现任何对话框 |
 | 13 | 加载扩展后打开 YouTube 视频页 | 右下角出现蓝色胶囊按钮，可拖拽 |
-| 14 | 点胶囊 / 点工具栏图标 | 程序置前、自动填链接并解析，按钮显示「已发送 ✓」 |
+| 14 | 点胶囊 / 弹窗「发送到 VideoDownload」 | 程序置前、自动填链接并解析 |
 | 15 | 在非支持站点（如 `example.org`） | 不出现悬浮按钮 |
 | 16 | 关闭程序后点扩展按钮 | 提示"软件未运行或连接已关闭"，不崩不阻塞 |
+| 17 | 弹窗点「同步 cookies 到程序」 | 日志显示「✓ 已同步 cookies：N 条」，`cookies.txt` 落盘 |
+| 18 | 同步 cookies 后解析年龄限制视频 | 出现完整清晰度列表（含 4K），不再只报 Sign in to confirm your age |
+| 19 | 机器上没有 Node/deno | 年龄限制视频仍拿不到格式（普通视频正常），日志提示缺 JS 运行时 |
 
 ---
 

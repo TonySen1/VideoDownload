@@ -1,13 +1,38 @@
 {
   "manifest_version": 3,
   "name": "VideoDownload 助手",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "description": "在支持的视频平台页面上，一键把链接发送到 VideoDownload 桌面程序解析下载。",
   "minimum_chrome_version": "105",
-  "permissions": ["tabs", "storage", "alarms"],
-  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "permissions": ["tabs", "storage", "alarms", "cookies"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "https://youtube.com/*",
+    "https://*.youtube.com/*",
+    "https://youtu.be/*",
+    "https://google.com/*",
+    "https://*.google.com/*",
+    "https://vimeo.com/*",
+    "https://*.vimeo.com/*",
+    "https://instagram.com/*",
+    "https://*.instagram.com/*",
+    "https://facebook.com/*",
+    "https://*.facebook.com/*",
+    "https://twitter.com/*",
+    "https://*.twitter.com/*",
+    "https://x.com/*",
+    "https://*.x.com/*",
+    "https://bilibili.com/*",
+    "https://*.bilibili.com/*",
+    "https://stashmedia.tv/*",
+    "https://*.stashmedia.tv/*",
+    "https://tiktok.com/*",
+    "https://*.tiktok.com/*"
+  ],
   "background": {
-    "service_worker": "background/service_worker.js"
+    "service_worker": "background/service_worker.js",
+    "type": "module"
   },
   "content_scripts": [
     {
@@ -17,7 +42,8 @@
     }
   ],
   "action": {
-    "default_title": "把当前页面发送到 VideoDownload",
+    "default_title": "VideoDownload 助手",
+    "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

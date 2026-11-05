@@ -29,6 +29,7 @@ APP_ID = "videosdown"
 MAX_BODY = 64 * 1024
 
 SubmitHandler = Callable[[str, str, dict[str, Any]], tuple[bool, str]]
+CookieHandler = Callable[[list[dict[str, Any]], dict[str, Any]], tuple[bool, str]]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -107,6 +108,18 @@ class _Handler(BaseHTTPRequestHandler):
             ok, msg = self.server.on_submit(url, title, data)  # type: ignore[attr-defined]
             self._send_json({"ok": ok, "msg": msg} if not ok else {"ok": True})
             return
+        if path == "/cookies":
+            data = self._read_json()
+            if not data:
+                self._send_json({"ok": False, "msg": "请求格式不正确"}, 400)
+                return
+            cookies = data.get("cookies")
+            if not isinstance(cookies, list):
+                self._send_json({"ok": False, "msg": "缺少 cookies 列表"}, 400)
+                return
+            ok, msg = self.server.on_cookies(cookies, data)  # type: ignore[attr-defined]
+            self._send_json({"ok": ok, "msg": msg} if not ok else {"ok": True, "msg": msg})
+            return
         if path == "/ping":
             self._send_json({"ok": True, "app": APP_ID})
             return
@@ -146,10 +159,14 @@ class BridgeServer:
         self,
         on_submit: SubmitHandler,
         settings: Callable[[], dict[str, Any]],
-        app_version: str = "1.1.0",
+        app_version: str = "1.3.0",
+        on_cookies: CookieHandler | None = None,
     ) -> None:
         self.on_submit_cb = on_submit
         self.settings_cb = settings
+        self.on_cookies_cb = on_cookies or (
+            lambda _cookies, _raw: (False, "本程序暂不支持接收 cookies")
+        )
         self.app_version = app_version
         self.port: int | None = None
         self._server: _Server | None = None
@@ -177,6 +194,7 @@ class BridgeServer:
             server.app_version = self.app_version  # type: ignore[attr-defined]
             server.settings = self.settings_cb  # type: ignore[attr-defined]
             server.on_submit = self.on_submit_cb  # type: ignore[attr-defined]
+            server.on_cookies = self.on_cookies_cb  # type: ignore[attr-defined]
             self._server = server
             self.port = port
             self._thread = threading.Thread(
