@@ -1,0 +1,59 @@
+THIRD-PARTY NOTICES
+===================
+
+本发布包内含第三方组件。各组件的版权归其作者所有，并遵循各自的许可证。
+The bundled third-party components are distributed under their own licenses.
+
+
+1. FFmpeg
+---------
+文件 / Files:
+    ffmpeg.exe
+    ffprobe.exe
+
+版本 / Version:
+    9.0.2-essentials_build-www.gyan.dev
+    Copyright (c) 2000-2026 the FFmpeg developers
+
+许可 / License:
+    GNU General Public License v3 (GPL-3.0)
+    本次构建启用了 --enable-gpl 与 --enable-version3，因此整体按 GPLv3 分发。
+    This build enables --enable-gpl and --enable-version3, so it is
+    distributed under GPLv3.
+
+源码获取 / Source code:
+    https://ffmpeg.org/download.html
+    https://github.com/FFmpeg/FFmpeg
+    https://www.gyan.dev/ffmpeg/builds/          （本构建的发布方）
+
+许可证全文 / Full license text:
+    https://www.gnu.org/licenses/gpl-3.0.html
+
+说明：
+    本程序通过命令行调用 FFmpeg 完成音视频合并与转码，未修改 FFmpeg 源码，
+    亦未将其静态链接进主程序。FFmpeg 作为独立可执行文件分发。
+
+
+2. yt-dlp
+---------
+本项目依赖 yt-dlp Python 库，已打包进 VideoDownload.exe。
+
+    版本 / Version: 2026.10.26
+    许可 / License: The Unlicense（公有领域）
+    项目地址 / Homepage: https://github.com/yt-dlp/yt-dlp
+
+
+3. Pillow
+---------
+用于显示视频缩略图，已打包进 VideoDownload.exe。
+
+    许可 / License: HPND (Historical Permission Notice and Disclaimer)
+    项目地址 / Homepage: https://python-pillow.org/
+
+
+4. Python
+---------
+VideoDownload.exe 由 PyInstaller 打包，内含 CPython 运行时。
+
+    许可 / License: PSF License Agreement
+    项目地址 / Homepage: https://www.python.org/
