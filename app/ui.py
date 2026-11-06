@@ -8,11 +8,12 @@ import threading
 import time
 import tkinter as tk
 import urllib.request
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
-from . import APP_NAME, __version__, config, cookies as cookie_util
+from . import APP_NAME, REPO_URL, __version__, config, cookies as cookie_util
 from .bridge import BridgeServer
 from .core import (
     AUDIO_FORMATS,
@@ -242,12 +243,27 @@ class VideoDownloadApp:
         scroll.grid(row=0, column=1, sticky="ns")
         self.log_text.configure(yscrollcommand=scroll.set)
 
-        # ---------------- 状态栏
+        # ---------------- 状态栏：左侧环境信息，右侧版本号（可点开仓库）
+        status_bar = ttk.Frame(self.root)
+        status_bar.pack(fill="x", side="bottom")
+
         self.env_label = ttk.Label(
-            self.root, text="正在检查 ffmpeg…", foreground=MUTED, anchor="w",
+            status_bar, text="正在检查 ffmpeg…", foreground=MUTED, anchor="w",
             padding=(14, 4),
         )
-        self.env_label.pack(fill="x", side="bottom")
+        self.env_label.pack(side="left", fill="x", expand=True)
+
+        self.version_label = ttk.Label(
+            status_bar,
+            text=f"v{__version__}",
+            foreground=MUTED,
+            anchor="e",
+            padding=(8, 4, 14, 4),
+            cursor="hand2",
+        )
+        self.version_label.pack(side="right")
+        self.version_label.bind("<Button-1>", self._on_version_click)
+        self._bind_hover(self.version_label, MUTED, ACCENT)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._sync_quality_state()
@@ -271,6 +287,21 @@ class VideoDownloadApp:
                 self.root.iconphoto(True, self._icon_photo)
         except Exception:  # noqa: BLE001
             pass
+
+    # ------------------------------------------------------------ 版本号链接
+    @staticmethod
+    def _bind_hover(widget: Any, normal: str, hover: str) -> None:
+        """鼠标移入/移出时换色，暗示可点击。"""
+        widget.bind("<Enter>", lambda _e: widget.configure(foreground=hover))
+        widget.bind("<Leave>", lambda _e: widget.configure(foreground=normal))
+
+    def _on_version_click(self, _event: Any = None) -> None:
+        """点击版本号打开项目仓库。"""
+        try:
+            webbrowser.open(REPO_URL)
+            self._log(f"已在浏览器打开项目主页：{REPO_URL}")
+        except Exception as exc:  # noqa: BLE001 - 打不开浏览器不该影响主流程
+            self._notify(f"无法打开浏览器：{exc}", ERR_COLOR, "✗")
 
     # ------------------------------------------------------------ 环境自检
     def _load_env_async(self) -> None:

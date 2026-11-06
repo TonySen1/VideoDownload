@@ -2,3 +2,4 @@
 
 __version__ = "1.3.0"
 APP_NAME = "VideoDownload"
+REPO_URL = "https://github.com/TonySen1/VideoDownload"
