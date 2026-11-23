@@ -226,6 +226,7 @@
 
   let showPill = true;
   let pillStyle = "flow";
+  let shapeReady = false;
   let wrapEl = null;
   let labelEl = null;
 
@@ -420,7 +421,12 @@
   function update() {
     const existing = document.getElementById(HOST_ID);
     if (showPill && isSupported(location.href)) {
-      if (!existing) buildPill();
+      if (!existing) {
+        buildPill();
+      } else if (shapeReady && wrapEl && !wrapEl.classList.contains("style-" + pillStyle)) {
+        // 存储读得比首帧慢时补一次形态校正，否则刷新后会停在默认胶囊
+        applyShape(pillStyle);
+      }
     } else if (existing) {
       existing.remove();
       wrapEl = null;
@@ -480,10 +486,14 @@
       if (stored && SHAPES.includes(stored[STYLE_KEY])) pillStyle = stored[STYLE_KEY];
     } catch {
       // 用默认胶囊
+    } finally {
+      shapeReady = true;
     }
+    // 首帧可能已用默认形态建好标记，这里补一次校正
+    applyShape(pillStyle);
   }
 
-  loadShape().then(update);
+  loadShape();
   setInterval(refreshSettings, 15000);
   refreshSettings();
   update();
