@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VideoDownload 助手",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "在支持的视频平台页面上，一键把链接发送到 VideoDownload 桌面程序解析下载。",
   "minimum_chrome_version": "105",
   "permissions": ["tabs", "storage", "alarms", "cookies"],
