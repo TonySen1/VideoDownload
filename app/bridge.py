@@ -159,7 +159,7 @@ class BridgeServer:
         self,
         on_submit: SubmitHandler,
         settings: Callable[[], dict[str, Any]],
-        app_version: str = "1.3.1",
+        app_version: str = "1.3.2",
         on_cookies: CookieHandler | None = None,
     ) -> None:
         self.on_submit_cb = on_submit
